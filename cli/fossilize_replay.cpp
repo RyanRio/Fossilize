@@ -1089,6 +1089,11 @@ struct ThreadedReplayer : StateCreatorInterface
 			*work_item.output.pipeline = VK_NULL_HANDLE;
 		}
 
+		// write marker file for LLPC
+		std::ofstream marker("marker.txt", ios_base::trunc | ios_base::binary);
+		marker.write(reinterpret_cast<const char*>(&work_item.hash), sizeof(Hash));
+		marker.close();
+
 		return ret;
 	}
 
@@ -1162,6 +1167,13 @@ struct ThreadedReplayer : StateCreatorInterface
 		}
 	}
 
+	void report_single_timing(const char* prefix, Hash hash,
+		std::chrono::time_point<std::chrono::steady_clock> start_time,
+		std::chrono::time_point<std::chrono::steady_clock> end_time) {
+		auto duration_ms = chrono::duration_cast<chrono::milliseconds>(end_time - start_time).count();
+		LOGI(" [PISO] %s: %016" PRIx64 ", TIME: %ld\n", prefix, hash, duration_ms);
+	}
+
 	void run_creation_work_item_graphics_iteration(const PipelineWorkItem &work_item, VkPipelineCache cache, bool primary)
 	{
 		reset_work_item(work_item);
@@ -1181,6 +1193,7 @@ struct ThreadedReplayer : StateCreatorInterface
 		{
 			auto end_time = chrono::steady_clock::now();
 			auto duration_ns = chrono::duration_cast<chrono::nanoseconds>(end_time - start_time).count();
+			report_single_timing("vkCreateGraphicsPipelines", work_item.hash, start_time, end_time);
 
 			graphics_pipeline_ns.fetch_add(duration_ns, std::memory_order_relaxed);
 			graphics_pipeline_count.fetch_add(1, std::memory_order_relaxed);
@@ -1228,6 +1241,7 @@ struct ThreadedReplayer : StateCreatorInterface
 		{
 			auto end_time = chrono::steady_clock::now();
 			auto duration_ns = chrono::duration_cast<chrono::nanoseconds>(end_time - start_time).count();
+			report_single_timing("vkCreateComputePipelines", work_item.hash, start_time, end_time);
 
 			compute_pipeline_ns.fetch_add(duration_ns, std::memory_order_relaxed);
 			compute_pipeline_count.fetch_add(1, std::memory_order_relaxed);
@@ -1275,6 +1289,7 @@ struct ThreadedReplayer : StateCreatorInterface
 		{
 			auto end_time = chrono::steady_clock::now();
 			auto duration_ns = chrono::duration_cast<chrono::nanoseconds>(end_time - start_time).count();
+			report_single_timing("vkCreateRayTracingPipelinesKHR", work_item.hash, start_time, end_time);
 
 			raytracing_pipeline_ns.fetch_add(duration_ns, std::memory_order_relaxed);
 			raytracing_pipeline_count.fetch_add(1, std::memory_order_relaxed);
@@ -1943,6 +1958,8 @@ struct ThreadedReplayer : StateCreatorInterface
 
 			auto end_time = chrono::steady_clock::now();
 			auto duration_ns = chrono::duration_cast<chrono::nanoseconds>(end_time - start_time).count();
+			report_single_timing("vkCreateShaderModule", hash, start_time, end_time);
+
 			shader_module_ns.fetch_add(duration_ns, std::memory_order_relaxed);
 
 			if (!ret)
